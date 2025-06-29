@@ -42,8 +42,12 @@ export function Toolbox({ isNodeSelected, onAction }: ToolboxProps) {
   const { toast } = useToast();
 
   const handleActionClick = (actionType: ActionType) => {
-    if (!isNodeSelected) {
+    if (!isNodeSelected && actionType !== 'DELETE') {
       toast({ title: "Please select a node first.", variant: "destructive" });
+      return;
+    }
+    if (actionType === 'DELETE' && !isNodeSelected) {
+      toast({ title: "Please select a node to delete.", variant: "destructive" });
       return;
     }
     startTransition(async () => {

@@ -19,13 +19,13 @@ function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (nodeRef.current) {
+    if (nodeRef.current && node.type === 'text') {
       const { offsetWidth, offsetHeight } = nodeRef.current;
       if (offsetWidth > 0 && offsetHeight > 0 && (node.width !== offsetWidth || node.height !== offsetHeight)) {
         onNodeResize(node.id, { width: offsetWidth, height: offsetHeight });
       }
     }
-  }, [node.content, node.id, node.width, node.height, onNodeResize]);
+  }, [node.content, node.id, node.width, node.height, onNodeResize, node.type]);
   
   const content = (
     node.type === 'youtube' ? (
@@ -57,7 +57,7 @@ function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }
         left: node.position.x,
         top: node.position.y,
         width: node.type === 'youtube' ? node.width : 'auto',
-        height: node.type === 'youtube' ? (node.width * 9) / 16 : 'auto',
+        height: node.type === 'youtube' ? node.height : 'auto',
       }}
     >
       {content}
