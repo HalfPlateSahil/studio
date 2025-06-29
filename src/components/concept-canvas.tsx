@@ -51,7 +51,7 @@ function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }
       className={cn(
         "absolute bg-card text-card-foreground rounded-lg shadow-lg p-4 cursor-grab transition-colors duration-200 ease-in-out",
         isSelected && "ring-2 ring-ring shadow-2xl",
-        node.type === 'text' ? 'max-w-xs' : 'w-72',
+        node.type === 'text' ? 'w-72' : 'w-72',
       )}
       style={{
         left: node.position.x,
