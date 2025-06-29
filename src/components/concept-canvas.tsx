@@ -1,0 +1,250 @@
+"use client";
+
+import { useState, useRef, useEffect, useTransition, useCallback } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
+import { generateNodeContent } from '@/ai/flows/generate-node-content';
+import type { Node, Edge, NodeType } from '@/types';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Toolbox } from '@/components/toolbox';
+import { ConceptNavigatorIcon } from '@/components/icons';
+import { cn, getYouTubeVideoId } from '@/lib/utils';
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from 'lucide-react';
+
+const INITIAL_NODE_WIDTH = 288; // w-72
+const INITIAL_NODE_HEIGHT = 128; // h-32
+
+function CanvasNode({ node, isSelected, onNodeDown, isProcessing }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; isProcessing: boolean; }) {
+  const content = (
+    node.type === 'youtube' ? (
+      <iframe
+        width="100%"
+        height="100%"
+        src={`https://www.youtube.com/embed/${node.content}`}
+        title="YouTube video player"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        className="rounded-md"
+      ></iframe>
+    ) : (
+      <div className="text-sm">{node.content}</div>
+    )
+  );
+  
+  return (
+    <div
+      onMouseDown={(e) => onNodeDown(e, node.id)}
+      className={cn(
+        "absolute bg-card text-card-foreground rounded-lg shadow-lg p-4 cursor-grab w-72 transition-all duration-200 ease-in-out",
+        isSelected && "ring-2 ring-primary shadow-2xl",
+        node.type === 'youtube' ? 'h-48' : 'h-auto min-h-32',
+      )}
+      style={{
+        left: node.position.x,
+        top: node.position.y,
+        width: node.width,
+        height: node.type === 'youtube' ? (node.width * 9) / 16 : node.height,
+      }}
+    >
+      {content}
+      {isProcessing && <div className="absolute inset-0 bg-background/50 flex items-center justify-center rounded-lg"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
+    </div>
+  );
+}
+
+export function ConceptCanvas() {
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+  
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const [canvasTransform, setCanvasTransform] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  
+  const draggingNodeRef = useRef<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  const getCanvasCenter = () => {
+    if (canvasRef.current) {
+      return {
+        x: canvasRef.current.clientWidth / 2 - INITIAL_NODE_WIDTH / 2 - canvasTransform.x,
+        y: canvasRef.current.clientHeight / 2 - INITIAL_NODE_HEIGHT / 2 - canvasTransform.y
+      };
+    }
+    return { x: 200, y: 200 };
+  }
+
+  const handleTopicSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const topic = (e.currentTarget.elements.namedItem('topic') as HTMLInputElement).value;
+    if (!topic.trim()) return;
+
+    const center = getCanvasCenter();
+    const newNode: Node = {
+      id: crypto.randomUUID(),
+      type: 'text',
+      content: topic,
+      position: { x: center.x, y: center.y },
+      width: INITIAL_NODE_WIDTH,
+      height: INITIAL_NODE_HEIGHT,
+    };
+    
+    setNodes([newNode]);
+    setEdges([]);
+    setSelectedNodeId(newNode.id);
+    (e.currentTarget.elements.namedItem('topic') as HTMLInputElement).value = '';
+  };
+
+  const addNode = (parentNodeId: string, content: string, type: NodeType) => {
+    const parentNode = nodes.find(n => n.id === parentNodeId);
+    if (!parentNode) return;
+
+    const newNode: Node = {
+      id: crypto.randomUUID(),
+      type,
+      content,
+      position: {
+        x: parentNode.position.x + parentNode.width + 80,
+        y: parentNode.position.y,
+      },
+      width: INITIAL_NODE_WIDTH,
+      height: INITIAL_NODE_HEIGHT,
+    };
+
+    const newEdge: Edge = {
+      id: `e-${parentNode.id}-${newNode.id}`,
+      source: parentNode.id,
+      target: newNode.id,
+    };
+
+    setNodes(prev => [...prev, newNode]);
+    setEdges(prev => [...prev, newEdge]);
+    setSelectedNodeId(newNode.id);
+  };
+  
+  const handleToolboxAction = async (actionType: string, data?: string) => {
+    if (!selectedNodeId) return;
+
+    const parentNode = nodes.find(n => n.id === selectedNodeId);
+    if (!parentNode) return;
+    
+    if (actionType === 'YOUTUBE') {
+      const videoId = getYouTubeVideoId(data || '');
+      if (videoId) {
+        addNode(selectedNodeId, videoId, 'youtube');
+      } else {
+        toast({ title: "Invalid YouTube URL", description: "Please enter a valid YouTube video URL.", variant: "destructive"});
+      }
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await generateNodeContent({
+          parentNodeContent: parentNode.content,
+          queryType: actionType as any,
+          customQuery: actionType === 'CUSTOM' ? data : undefined,
+        });
+        if (result.generatedContent) {
+          addNode(selectedNodeId, result.generatedContent, 'text');
+        }
+      } catch (error) {
+        console.error("AI generation failed:", error);
+        toast({ title: "AI Generation Failed", description: "Could not generate content. Please try again.", variant: "destructive"});
+      }
+    });
+  };
+
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.target !== e.currentTarget && !e.target.classList.contains("canvas-bg")) return;
+    setIsPanning(true);
+    setSelectedNodeId(null);
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (isPanning) {
+      setCanvasTransform(prev => ({ x: prev.x + e.movementX, y: prev.y + e.movementY }));
+    }
+    if (draggingNodeRef.current) {
+        const { nodeId, offsetX, offsetY } = draggingNodeRef.current;
+        setNodes(prev => prev.map(n => 
+            n.id === nodeId 
+            ? { ...n, position: { x: n.position.x + e.movementX, y: n.position.y + e.movementY } }
+            : n
+        ));
+    }
+  };
+
+  const onMouseUp = () => {
+    setIsPanning(false);
+    draggingNodeRef.current = null;
+  };
+
+  const onNodeDown = (e: MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    setSelectedNodeId(nodeId);
+    draggingNodeRef.current = { nodeId, offsetX: e.nativeEvent.offsetX, offsetY: e.nativeEvent.offsetY };
+  }
+
+  const getEdgePath = (sourceNode: Node, targetNode: Node) => {
+    const sourceX = sourceNode.position.x + sourceNode.width / 2;
+    const sourceY = sourceNode.position.y + sourceNode.height / 2;
+    const targetX = targetNode.position.x + targetNode.width / 2;
+    const targetY = targetNode.position.y + targetNode.height / 2;
+    
+    return `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
+  }
+
+  return (
+    <div className="relative w-full h-full" ref={canvasRef}>
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-4">
+        <div className="flex items-center gap-2 p-2 bg-card/80 backdrop-blur-sm rounded-lg shadow-md">
+          <ConceptNavigatorIcon className="w-8 h-8 text-primary" />
+          <h1 className="text-xl font-bold font-headline">Concept Navigator</h1>
+        </div>
+        <form onSubmit={handleTopicSubmit} className="flex gap-2">
+          <Input name="topic" placeholder="Enter a topic to explore..." className="w-96 bg-card/80 backdrop-blur-sm shadow-md" />
+          <Button type="submit" disabled={isPending}>Start Exploring</Button>
+        </form>
+      </div>
+      
+      <Toolbox isNodeSelected={!!selectedNodeId} onAction={handleToolboxAction} />
+
+      <div
+        className="w-full h-full cursor-grab active:cursor-grabbing canvas-bg"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
+        <div className="absolute top-0 left-0 w-full h-full" style={{ transform: `translate(${canvasTransform.x}px, ${canvasTransform.y}px)` }}>
+            <svg className="absolute w-full h-full pointer-events-none" style={{overflow: 'visible'}}>
+                {edges.map(edge => {
+                    const sourceNode = nodes.find(n => n.id === edge.source);
+                    const targetNode = nodes.find(n => n.id === edge.target);
+                    if (!sourceNode || !targetNode) return null;
+
+                    return (
+                        <path key={edge.id} d={getEdgePath(sourceNode, targetNode)} stroke="hsl(var(--primary))" strokeWidth="2" fill="none" />
+                    )
+                })}
+            </svg>
+            
+            {nodes.map(node => (
+                <CanvasNode 
+                    key={node.id} 
+                    node={node} 
+                    isSelected={selectedNodeId === node.id}
+                    onNodeDown={onNodeDown}
+                    isProcessing={isPending && selectedNodeId === node.id}
+                />
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+}
