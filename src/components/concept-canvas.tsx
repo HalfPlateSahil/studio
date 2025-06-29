@@ -240,15 +240,20 @@ export function ConceptCanvas() {
 
     setCanvasTransform({ x: newX, y: newY, zoom: clampedZoom });
   };
-
+  
+  const SVG_CANVAS_OFFSET = 5000;
   const getEdgePath = (sourceNode: Node, targetNode: Node) => {
-    const sourceX = sourceNode.position.x + sourceNode.width / 2;
-    const sourceY = sourceNode.position.y + sourceNode.height / 2;
-    const targetX = targetNode.position.x + targetNode.width / 2;
-    const targetY = targetNode.position.y + targetNode.height / 2;
+    if (!sourceNode || !targetNode || !sourceNode.width || !targetNode.width) {
+        return '';
+    }
+    const sourceX = sourceNode.position.x + sourceNode.width / 2 + SVG_CANVAS_OFFSET;
+    const sourceY = sourceNode.position.y + sourceNode.height / 2 + SVG_CANVAS_OFFSET;
+    const targetX = targetNode.position.x + targetNode.width / 2 + SVG_CANVAS_OFFSET;
+    const targetY = targetNode.position.y + targetNode.height / 2 + SVG_CANVAS_OFFSET;
     
     return `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
   }
+
 
   return (
     <div className="relative w-full h-full" ref={canvasRef}>
@@ -280,14 +285,22 @@ export function ConceptCanvas() {
             transformOrigin: '0 0'
           }}
         >
-            <svg className="absolute w-full h-full pointer-events-none" style={{overflow: 'visible'}}>
+            <svg 
+              className="absolute pointer-events-none" 
+              style={{
+                width: SVG_CANVAS_OFFSET * 2,
+                height: SVG_CANVAS_OFFSET * 2,
+                top: -SVG_CANVAS_OFFSET,
+                left: -SVG_CANVAS_OFFSET,
+              }}
+            >
                 {edges.map(edge => {
                     const sourceNode = nodes.find(n => n.id === edge.source);
                     const targetNode = nodes.find(n => n.id === edge.target);
                     if (!sourceNode || !targetNode) return null;
 
                     return (
-                        <path key={edge.id} d={getEdgePath(sourceNode, targetNode)} stroke="hsl(var(--ring))" strokeWidth="2" fill="none" />
+                        <path key={edge.id} d={getEdgePath(sourceNode, targetNode)} stroke="hsl(var(--ring))" strokeWidth="2" fill="none" strokeLinecap="round" />
                     )
                 })}
             </svg>
