@@ -20,6 +20,7 @@ const GenerateNodeContentInputSchema = z.object({
     .describe('The type of query to generate content for.'),
   customQuery: z.string().optional().describe('A custom query provided by the user.'),
   responseLength: z.number().optional().describe('The desired length of the response in words.'),
+  autoLength: z.boolean().optional().describe('Whether the AI should automatically determine the response length.'),
   responseFormat: z.string().optional().describe('The desired format for the response (e.g., paragraph, bullet points).'),
   tone: z.string().optional().describe('The desired tone for the response (e.g., professional, friendly).'),
   customInstructions: z.string().optional().describe('Any custom instructions for the AI.'),
@@ -62,9 +63,11 @@ Please adhere to the following instructions for your response:
 {{#if responseFormat}}
 - Format your response as {{{responseFormat}}}.
 {{/if}}
+{{#unless autoLength}}
 {{#if responseLength}}
 - Keep the response length around {{{responseLength}}} words.
 {{/if}}
+{{/unless}}
 {{#if customInstructions}}
 - Follow these custom instructions: {{{customInstructions}}}
 {{/if}}

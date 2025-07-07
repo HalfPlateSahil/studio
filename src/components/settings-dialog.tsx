@@ -17,6 +17,8 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 interface SettingsDialogProps {
   settings: Settings;
@@ -38,6 +40,12 @@ export function SettingsDialog({ settings, onSettingsChange }: SettingsDialogPro
   
   const handleSliderChange = (value: number[]) => {
     setCurrentSettings(prev => ({ ...prev, responseLength: value[0] }));
+  };
+
+  const handleAutoLengthChange = (checked: boolean | 'indeterminate') => {
+    if (typeof checked === 'boolean') {
+      setCurrentSettings(prev => ({ ...prev, autoLength: checked }));
+    }
   };
 
   const handleFormatChange = (value: Settings['responseFormat']) => {
@@ -64,7 +72,22 @@ export function SettingsDialog({ settings, onSettingsChange }: SettingsDialogPro
         </SheetHeader>
         <div className="grid gap-6 py-6">
           <div className="grid gap-3">
-            <Label htmlFor="response-length">Response Length (words)</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="response-length">Response Length (words)</Label>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="auto-length"
+                  checked={currentSettings.autoLength}
+                  onCheckedChange={handleAutoLengthChange}
+                />
+                <label
+                  htmlFor="auto-length"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Auto
+                </label>
+              </div>
+            </div>
             <div className='flex items-center gap-4'>
               <Slider
                 id="response-length"
@@ -73,8 +96,14 @@ export function SettingsDialog({ settings, onSettingsChange }: SettingsDialogPro
                 step={10}
                 value={[currentSettings.responseLength]}
                 onValueChange={handleSliderChange}
+                disabled={currentSettings.autoLength}
               />
-              <span className="text-sm font-medium w-12 text-center">{currentSettings.responseLength}</span>
+              <span className={cn(
+                "text-sm font-medium w-12 text-center transition-opacity",
+                currentSettings.autoLength && "opacity-50"
+              )}>
+                {currentSettings.responseLength}
+              </span>
             </div>
           </div>
           <div className="grid gap-3">

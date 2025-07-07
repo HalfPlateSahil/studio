@@ -17,6 +17,7 @@ export interface Edge {
 
 export interface Settings {
   responseLength: number;
+  autoLength: boolean;
   responseFormat: 'paragraph' | 'bullet points' | 'single word';
   tone: 'professional' | 'business' | 'friendly' | 'funny' | 'straightforward' | 'one word' | 'expressive';
   customInstructions: string;

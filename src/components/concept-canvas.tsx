@@ -84,6 +84,7 @@ export function ConceptCanvas() {
 
   const [settings, setSettings] = useState<Settings>({
     responseLength: 100,
+    autoLength: false,
     responseFormat: 'paragraph',
     tone: 'professional',
     customInstructions: '',
