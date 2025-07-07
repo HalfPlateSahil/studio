@@ -7,7 +7,7 @@ import type { Node, Edge, NodeType, Settings } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Toolbox } from '@/components/toolbox';
-import type { ActionType } from '@/components/toolbox';
+import type { ActionType } from '@/types';
 import { ConceptItIcon } from '@/components/icons';
 import { cn, getYouTubeVideoId } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
@@ -277,7 +277,6 @@ export function ConceptCanvas() {
           <ConceptItIcon className="w-8 h-8 text-primary" />
           <div>
             <h1 className="text-xl font-bold font-headline">ConceptIt</h1>
-            <p className="text-xs text-muted-foreground">Created By Sahil</p>
           </div>
         </div>
         <form onSubmit={handleTopicSubmit} className="flex gap-2">
@@ -289,6 +288,8 @@ export function ConceptCanvas() {
       <Toolbox isNodeSelected={!!selectedNodeId} onAction={handleToolboxAction} />
 
       <SettingsDialog settings={settings} onSettingsChange={handleSettingsChange} />
+
+      <p className="absolute bottom-9 right-20 z-10 text-sm text-muted-foreground font-medium">@HalfPlateSahil</p>
 
       <div
         className="w-full h-full cursor-grab active:cursor-grabbing canvas-bg"
