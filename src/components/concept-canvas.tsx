@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Toolbox } from '@/components/toolbox';
 import type { ActionType } from '@/components/toolbox';
-import { ConceptNavigatorIcon } from '@/components/icons';
+import { ConceptItIcon } from '@/components/icons';
 import { cn, getYouTubeVideoId } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
@@ -274,8 +274,11 @@ export function ConceptCanvas() {
     <div className="relative w-full h-full" ref={canvasRef}>
       <div className="absolute top-4 left-4 z-10 flex items-center gap-4">
         <div className="flex items-center gap-2 p-2 bg-card/80 backdrop-blur-sm rounded-lg shadow-md">
-          <ConceptNavigatorIcon className="w-8 h-8 text-primary" />
-          <h1 className="text-xl font-bold font-headline">Concept Navigator</h1>
+          <ConceptItIcon className="w-8 h-8 text-primary" />
+          <div>
+            <h1 className="text-xl font-bold font-headline">ConceptIt</h1>
+            <p className="text-xs text-muted-foreground">Created By Sahil</p>
+          </div>
         </div>
         <form onSubmit={handleTopicSubmit} className="flex gap-2">
           <Input name="topic" placeholder="Enter a topic to explore..." className="w-96 bg-card/80 backdrop-blur-sm shadow-md" />
