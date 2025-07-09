@@ -16,11 +16,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const INITIAL_NODE_WIDTH = 288; // w-72
 const INITIAL_NODE_HEIGHT = 128; // h-32
 
-function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessing, onNodeResize }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; onNodeTouchStart: (e: TouchEvent, nodeId: string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; }) {
+function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessing, onNodeResize, isBeingDragged }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; onNodeTouchStart: (e: TouchEvent, nodeId: string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; isBeingDragged: boolean; }) {
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -42,7 +43,7 @@ function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessi
         frameBorder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        className="rounded-md"
+        className={cn("rounded-md", isBeingDragged && "pointer-events-none")}
       ></iframe>
     ) : (
       <div className="text-sm">{node.content}</div>
@@ -80,6 +81,7 @@ export function ConceptCanvas() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
 
   const [canvasTransform, setCanvasTransform] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
@@ -238,6 +240,7 @@ export function ConceptCanvas() {
   const handleNodePointerDown = (nodeId: string, clientX: number, clientY: number) => {
     setSelectedNodeId(nodeId);
     draggingNodeRef.current = { nodeId };
+    setDraggingNodeId(nodeId);
     lastPositionRef.current = { x: clientX, y: clientY };
     if (isMobile) {
       interactionStartRef.current = { x: clientX, y: clientY, time: Date.now() };
@@ -277,6 +280,7 @@ export function ConceptCanvas() {
     
     setIsPanning(false);
     draggingNodeRef.current = null;
+    setDraggingNodeId(null);
     interactionStartRef.current = null;
     lastPositionRef.current = null;
   };
@@ -288,7 +292,10 @@ export function ConceptCanvas() {
   };
   const onMouseMove = (e: MouseEvent) => handlePointerMove(e.clientX, e.clientY);
   const onMouseUp = (e: MouseEvent) => handlePointerUp(e.clientX, e.clientY);
-  const onMouseLeave = () => handlePointerUp(0, 0); // Reset state on leave
+  const onMouseLeave = () => {
+    handlePointerUp(0,0);
+    setDraggingNodeId(null);
+  };
 
   const getTouchDistance = (t1: Touch, t2: Touch) => {
     return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -465,35 +472,38 @@ export function ConceptCanvas() {
                     onNodeTouchStart={onNodeTouchStart}
                     isProcessing={isPending && selectedNodeId === node.id}
                     onNodeResize={handleNodeResize}
+                    isBeingDragged={draggingNodeId === node.id}
                 />
             ))}
         </div>
       </div>
        <Dialog open={isYoutubeDialogOpen} onOpenChange={setIsYoutubeDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Relevant YouTube Videos</DialogTitle>
             <DialogDescription>
               Select a video to add to your canvas.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto">
-            {youtubeResults.length > 0 ? (
-              youtubeResults.map((video) => (
-                <Card key={video.videoId} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleYoutubeSelect(video.videoId)}>
-                  <CardHeader className="p-0">
-                    <Image src={video.thumbnailUrl} alt={video.title} width={300} height={168} className="rounded-t-lg w-full object-cover" />
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <CardTitle className="text-base line-clamp-2">{video.title}</CardTitle>
-                    <CardDescription className="text-xs line-clamp-3 mt-1">{video.description}</CardDescription>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <p>No videos found.</p>
-            )}
-          </div>
+          <ScrollArea className="flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pr-6">
+              {youtubeResults.length > 0 ? (
+                youtubeResults.map((video) => (
+                  <Card key={video.videoId} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleYoutubeSelect(video.videoId)}>
+                    <CardHeader className="p-0">
+                      <Image src={video.thumbnailUrl} alt={video.title} width={300} height={168} className="rounded-t-lg w-full object-cover" />
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <CardTitle className="text-base line-clamp-2">{video.title}</CardTitle>
+                      <CardDescription className="text-xs line-clamp-3 mt-1">{video.description}</CardDescription>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <p className="col-span-full text-center text-muted-foreground py-8">No videos found.</p>
+              )}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>
