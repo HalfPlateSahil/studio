@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useTransition, useCallback, useLayoutEffect } from 'react';
-import type { FormEvent, MouseEvent, WheelEvent } from 'react';
+import type { FormEvent, MouseEvent, WheelEvent, TouchEvent } from 'react';
 import { generateNodeContent } from '@/ai/flows/generate-node-content';
 import { findYouTubeVideos } from '@/ai/flows/find-youtube-videos';
 import type { Node, Edge, NodeType, Settings, ActionType, YouTubeVideo } from '@/types';
@@ -20,7 +20,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 const INITIAL_NODE_WIDTH = 288; // w-72
 const INITIAL_NODE_HEIGHT = 128; // h-32
 
-function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; }) {
+function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessing, onNodeResize }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; onNodeTouchStart: (e: TouchEvent, nodeId: string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; }) {
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -53,6 +53,7 @@ function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }
     <div
       ref={nodeRef}
       onMouseDown={(e) => onNodeDown(e, node.id)}
+      onTouchStart={(e) => onNodeTouchStart(e, node.id)}
       className={cn(
         "absolute bg-card text-card-foreground rounded-lg shadow-lg p-4 cursor-grab transition-colors duration-200 ease-in-out",
         isSelected && "ring-2 ring-ring shadow-2xl",
@@ -83,9 +84,11 @@ export function ConceptCanvas() {
   const [canvasTransform, setCanvasTransform] = useState({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
   
-  const draggingNodeRef = useRef<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number; time: number; nodeId: string } | null>(null);
+  const draggingNodeRef = useRef<{ nodeId: string; } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  
+  const interactionStartRef = useRef<{ x: number; y: number; time: number; } | null>(null);
+  const lastPositionRef = useRef<{ x: number, y: number } | null>(null);
 
   const [settings, setSettings] = useState<Settings>({
     responseLength: 100,
@@ -220,58 +223,82 @@ export function ConceptCanvas() {
     setYoutubeResults([]);
   }
 
-  const onMouseDown = (e: MouseEvent) => {
-    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("canvas-bg")) return;
-    setIsPanning(true);
-    setSelectedNodeId(null);
-    if (isMobile) {
-      setIsMobileToolboxOpen(false);
+  const handlePointerDown = (clientX: number, clientY: number, target: EventTarget) => {
+    if (target === canvasRef.current || (target as HTMLElement).classList.contains("canvas-bg")) {
+        setIsPanning(true);
+        setSelectedNodeId(null);
+        if (isMobile) {
+          setIsMobileToolboxOpen(false);
+        }
+        lastPositionRef.current = { x: clientX, y: clientY };
     }
   };
 
-  const onMouseMove = (e: MouseEvent) => {
-    if (isPanning) {
-      setCanvasTransform(prev => ({ ...prev, x: prev.x + e.movementX, y: prev.y + e.movementY }));
+  const handleNodePointerDown = (nodeId: string, clientX: number, clientY: number) => {
+    setSelectedNodeId(nodeId);
+    draggingNodeRef.current = { nodeId };
+    lastPositionRef.current = { x: clientX, y: clientY };
+    if (isMobile) {
+      interactionStartRef.current = { x: clientX, y: clientY, time: Date.now() };
     }
-    if (draggingNodeRef.current) {
+  };
+
+  const handlePointerMove = (clientX: number, clientY: number) => {
+    if (!lastPositionRef.current) return;
+
+    const deltaX = clientX - lastPositionRef.current.x;
+    const deltaY = clientY - lastPositionRef.current.y;
+
+    if (isPanning) {
+      setCanvasTransform(prev => ({ ...prev, x: prev.x + deltaX, y: prev.y + deltaY }));
+    } else if (draggingNodeRef.current) {
         const { nodeId } = draggingNodeRef.current;
         setNodes(prev => prev.map(n => 
             n.id === nodeId 
-            ? { ...n, position: { x: n.position.x + e.movementX / canvasTransform.zoom, y: n.position.y + e.movementY / canvasTransform.zoom } }
+            ? { ...n, position: { x: n.position.x + deltaX / canvasTransform.zoom, y: n.position.y + deltaY / canvasTransform.zoom } }
             : n
         ));
     }
+    
+    lastPositionRef.current = { x: clientX, y: clientY };
   };
 
-  const onMouseUp = (e?: MouseEvent) => {
-    // Check for tap gesture on mobile
-    if (isMobile && e && dragStartRef.current && draggingNodeRef.current) {
-      const { x, y, time, nodeId: startNodeId } = dragStartRef.current;
+  const handlePointerUp = (clientX: number, clientY: number) => {
+    if (isMobile && interactionStartRef.current && draggingNodeRef.current) {
+      const { x, y, time } = interactionStartRef.current;
       const timeDiff = Date.now() - time;
-      const distMoved = Math.sqrt(Math.pow(e.clientX - x, 2) + Math.pow(e.clientY - y, 2));
+      const distMoved = Math.sqrt(Math.pow(clientX - x, 2) + Math.pow(clientY - y, 2));
 
-      // If it's a short press and minimal movement, treat as a tap
       if (timeDiff < 250 && distMoved < 10) {
-        // Ensure the tap was on the currently selected node
-        if (startNodeId === selectedNodeId) {
-          setIsMobileToolboxOpen(true);
-        }
+        setIsMobileToolboxOpen(true);
       }
     }
     
     setIsPanning(false);
     draggingNodeRef.current = null;
-    dragStartRef.current = null;
+    interactionStartRef.current = null;
+    lastPositionRef.current = null;
   };
 
+  const onMouseDown = (e: MouseEvent) => handlePointerDown(e.clientX, e.clientY, e.target);
   const onNodeDown = (e: MouseEvent, nodeId: string) => {
     e.stopPropagation();
-    setSelectedNodeId(nodeId);
-    draggingNodeRef.current = { nodeId, offsetX: e.nativeEvent.offsetX, offsetY: e.nativeEvent.offsetY };
-    if (isMobile) {
-      dragStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now(), nodeId };
-    }
-  }
+    handleNodePointerDown(nodeId, e.clientX, e.clientY);
+  };
+  const onMouseMove = (e: MouseEvent) => handlePointerMove(e.clientX, e.clientY);
+  const onMouseUp = (e: MouseEvent) => handlePointerUp(e.clientX, e.clientY);
+  const onMouseLeave = () => handlePointerUp(0, 0); // Reset state on leave
+
+  const onTouchStart = (e: TouchEvent) => handlePointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target);
+  const onNodeTouchStart = (e: TouchEvent, nodeId: string) => {
+    e.stopPropagation();
+    handleNodePointerDown(nodeId, e.touches[0].clientX, e.touches[0].clientY);
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    if (draggingNodeRef.current) e.preventDefault();
+    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  };
+  const onTouchEnd = (e: TouchEvent) => handlePointerUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
 
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
     if (!canvasRef.current) return;
@@ -339,8 +366,11 @@ export function ConceptCanvas() {
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onMouseLeave={onMouseLeave}
         onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         <div 
           className="absolute top-0 left-0" 
@@ -375,6 +405,7 @@ export function ConceptCanvas() {
                     node={node} 
                     isSelected={selectedNodeId === node.id}
                     onNodeDown={onNodeDown}
+                    onNodeTouchStart={onNodeTouchStart}
                     isProcessing={isPending && selectedNodeId === node.id}
                     onNodeResize={handleNodeResize}
                 />
