@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   BookText,
@@ -19,7 +19,6 @@ import {
   Youtube,
   Plus,
   Trash2,
-  PanelTop,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +30,8 @@ interface ToolboxProps {
   onAction: (actionType: ActionType, data?: string) => void;
   settings: Settings;
   onSettingsChange: (newSettings: Partial<Settings>) => void;
+  isMobileToolboxOpen: boolean;
+  onMobileToolboxOpenChange: (open: boolean) => void;
 }
 
 const actionButtons = [
@@ -42,12 +43,18 @@ const actionButtons = [
   { type: 'DELETE', label: 'Delete', icon: Trash2 },
 ];
 
-export function Toolbox({ isNodeSelected, onAction, settings, onSettingsChange }: ToolboxProps) {
+export function Toolbox({
+  isNodeSelected,
+  onAction,
+  settings,
+  onSettingsChange,
+  isMobileToolboxOpen,
+  onMobileToolboxOpenChange,
+}: ToolboxProps) {
   const [isPending, setIsPending] = useState(false);
   const [activeInput, setActiveInput] = useState<'custom' | 'youtube' | null>(null);
   const [inputValue, setInputValue] = useState('');
   const { toast } = useToast();
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleAction = async (action: ActionType, data?: string) => {
@@ -71,7 +78,7 @@ export function Toolbox({ isNodeSelected, onAction, settings, onSettingsChange }
         setInputValue('');
         setActiveInput(null);
       }
-      setIsSheetOpen(false);
+      onMobileToolboxOpenChange(false);
     }
   };
 
@@ -173,14 +180,9 @@ export function Toolbox({ isNodeSelected, onAction, settings, onSettingsChange }
         />
       </div>
 
-      {/* Mobile Toolbox: A sheet triggered from the bottom right */}
+      {/* Mobile Toolbox: A sheet triggered by node selection */}
       <div className="md:hidden">
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="icon" className="fixed bottom-4 right-4 z-10 rounded-full h-12 w-12 shadow-lg">
-              <PanelTop className="h-6 w-6" />
-            </Button>
-          </SheetTrigger>
+        <Sheet open={isMobileToolboxOpen} onOpenChange={onMobileToolboxOpenChange}>
           <SheetContent side="bottom" className="h-[80dvh] flex flex-col p-0">
             <SheetHeader className="p-4 pb-2 flex-row justify-between items-center border-b">
               <SheetTitle>Toolbox</SheetTitle>

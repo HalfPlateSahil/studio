@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const INITIAL_NODE_WIDTH = 288; // w-72
 const INITIAL_NODE_HEIGHT = 128; // h-32
@@ -73,6 +74,7 @@ function CanvasNode({ node, isSelected, onNodeDown, isProcessing, onNodeResize }
 export function ConceptCanvas() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -94,6 +96,7 @@ export function ConceptCanvas() {
 
   const [youtubeResults, setYoutubeResults] = useState<YouTubeVideo[]>([]);
   const [isYoutubeDialogOpen, setIsYoutubeDialogOpen] = useState(false);
+  const [isMobileToolboxOpen, setIsMobileToolboxOpen] = useState(false);
 
 
   const handleSettingsChange = (newSettings: Partial<Settings>) => {
@@ -220,6 +223,9 @@ export function ConceptCanvas() {
     if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("canvas-bg")) return;
     setIsPanning(true);
     setSelectedNodeId(null);
+    if (isMobile) {
+      setIsMobileToolboxOpen(false);
+    }
   };
 
   const onMouseMove = (e: MouseEvent) => {
@@ -245,6 +251,9 @@ export function ConceptCanvas() {
     e.stopPropagation();
     setSelectedNodeId(nodeId);
     draggingNodeRef.current = { nodeId, offsetX: e.nativeEvent.offsetX, offsetY: e.nativeEvent.offsetY };
+    if (isMobile) {
+      setIsMobileToolboxOpen(true);
+    }
   }
 
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
@@ -302,6 +311,8 @@ export function ConceptCanvas() {
         onAction={handleToolboxAction} 
         settings={settings}
         onSettingsChange={handleSettingsChange}
+        isMobileToolboxOpen={isMobileToolboxOpen}
+        onMobileToolboxOpenChange={setIsMobileToolboxOpen}
       />
 
       <p className="absolute bottom-9 right-4 md:right-20 z-10 text-sm text-muted-foreground font-medium">@HalfPlateSahil</p>
