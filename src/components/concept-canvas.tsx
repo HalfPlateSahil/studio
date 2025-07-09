@@ -89,6 +89,7 @@ export function ConceptCanvas() {
   
   const interactionStartRef = useRef<{ x: number; y: number; time: number; } | null>(null);
   const lastPositionRef = useRef<{ x: number, y: number } | null>(null);
+  const pinchDistanceRef = useRef<number | null>(null);
 
   const [settings, setSettings] = useState<Settings>({
     responseLength: 100,
@@ -289,16 +290,72 @@ export function ConceptCanvas() {
   const onMouseUp = (e: MouseEvent) => handlePointerUp(e.clientX, e.clientY);
   const onMouseLeave = () => handlePointerUp(0, 0); // Reset state on leave
 
-  const onTouchStart = (e: TouchEvent) => handlePointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target);
+  const getTouchDistance = (t1: Touch, t2: Touch) => {
+    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  };
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length === 1) {
+      handlePointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchDistanceRef.current = getTouchDistance(e.touches[0], e.touches[1]);
+      setIsPanning(false);
+      lastPositionRef.current = null;
+    }
+  };
+  
   const onNodeTouchStart = (e: TouchEvent, nodeId: string) => {
     e.stopPropagation();
-    handleNodePointerDown(nodeId, e.touches[0].clientX, e.touches[0].clientY);
+    if (e.touches.length === 1) {
+      handleNodePointerDown(nodeId, e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchDistanceRef.current = getTouchDistance(e.touches[0], e.touches[1]);
+      draggingNodeRef.current = null;
+      interactionStartRef.current = null;
+      lastPositionRef.current = null;
+    }
   };
+  
   const onTouchMove = (e: TouchEvent) => {
-    if (draggingNodeRef.current) e.preventDefault();
-    handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+    if (e.touches.length === 1) {
+      if (draggingNodeRef.current) e.preventDefault();
+      handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2 && pinchDistanceRef.current !== null) {
+      e.preventDefault();
+      if (!canvasRef.current) return;
+
+      const newDist = getTouchDistance(e.touches[0], e.touches[1]);
+      const oldDist = pinchDistanceRef.current;
+      const zoomFactor = newDist / oldDist;
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+      const newZoom = canvasTransform.zoom * zoomFactor;
+      const clampedZoom = Math.max(0.2, Math.min(3, newZoom));
+
+      const worldX = (midX - canvasTransform.x) / canvasTransform.zoom;
+      const worldY = (midY - canvasTransform.y) / canvasTransform.zoom;
+
+      const newX = midX - worldX * clampedZoom;
+      const newY = midY - worldY * clampedZoom;
+
+      setCanvasTransform({ x: newX, y: newY, zoom: clampedZoom });
+      pinchDistanceRef.current = newDist;
+    }
   };
-  const onTouchEnd = (e: TouchEvent) => handlePointerUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  
+  const onTouchEnd = (e: TouchEvent) => {
+    if (e.touches.length < 2) {
+      pinchDistanceRef.current = null;
+    }
+    if (lastPositionRef.current) {
+        handlePointerUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    }
+  };
 
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
     if (!canvasRef.current) return;
