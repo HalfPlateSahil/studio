@@ -24,6 +24,8 @@ export async function searchYouTube(query: string): Promise<YouTubeSearchResult[
     return [];
   }
 
+  console.log(`[YouTube Service] Searching for: "${query}"`);
+
   try {
     const response = await youtube.search.list({
       part: ['snippet'],
@@ -35,15 +37,19 @@ export async function searchYouTube(query: string): Promise<YouTubeSearchResult[
 
     const items = response.data.items;
     if (!items) {
+      console.log('[YouTube Service] No items returned from API.');
       return [];
     }
 
-    return items.map((item) => ({
+    const results = items.map((item) => ({
       videoId: item.id?.videoId || '',
       title: item.snippet?.title || 'No title',
       description: item.snippet?.description || 'No description',
       thumbnailUrl: `https://i.ytimg.com/vi/${item.id?.videoId}/hqdefault.jpg`,
     })).filter(item => item.videoId); // Filter out any items that didn't have a videoId
+
+    console.log(`[YouTube Service] Found ${results.length} valid video results.`);
+    return results;
 
   } catch (error) {
     console.error('Error searching YouTube:', error);
