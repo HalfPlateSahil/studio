@@ -1,4 +1,4 @@
-export type NodeType = 'text' | 'youtube';
+export type NodeType = 'text' | 'youtube' | 'image';
 
 export interface Node {
   id: string;
@@ -15,7 +15,22 @@ export interface Edge {
   target: string;
 }
 
-export type ActionType = 'WHAT' | 'HOW' | 'WHEN' | 'EXPLAIN' | 'EXPAND' | 'CUSTOM' | 'YOUTUBE' | 'DELETE';
+export type ActionType = 
+  // Node-specific actions
+  | 'WHAT' 
+  | 'HOW' 
+  | 'WHEN' 
+  | 'EXPLAIN' 
+  | 'EXPAND' 
+  | 'CUSTOM' 
+  | 'YOUTUBE' 
+  | 'DELETE'
+  | 'IMAGE'
+  | 'EXPAND_TOPIC'
+  // Global canvas actions
+  | 'SUMMARIZE'
+  | 'SUGGEST';
+
 
 export interface Settings {
   responseLength: number;
@@ -30,4 +45,10 @@ export interface YouTubeVideo {
   title: string;
   description: string;
   thumbnailUrl: string;
+}
+
+export interface SuggestedConnection {
+  sourceNodeId: string;
+  targetNodeId: string;
+  reason: string;
 }

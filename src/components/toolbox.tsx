@@ -20,10 +20,16 @@ import {
   Plus,
   Trash2,
   Settings as SettingsIcon,
+  Lightbulb,
+  FileText,
+  Image as ImageIcon,
+  BrainCircuit,
+  SeparatorHorizontal
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { ActionType, Settings } from '@/types';
 import { SettingsDialog } from './settings-dialog';
+import { Separator } from './ui/separator';
 
 interface ToolboxProps {
   isNodeSelected: boolean;
@@ -34,14 +40,21 @@ interface ToolboxProps {
   onMobileToolboxOpenChange: (open: boolean) => void;
 }
 
-const actionButtons = [
+const nodeActions = [
   { type: 'WHAT', label: 'What', icon: HelpCircle },
   { type: 'HOW', label: 'How', icon: Wrench },
   { type: 'WHEN', label: 'When', icon: Calendar },
   { type: 'EXPLAIN', label: 'Explain', icon: BookText },
   { type: 'EXPAND', label: 'Expand', icon: Expand },
+  { type: 'IMAGE', label: 'Image', icon: ImageIcon },
+  { type: 'EXPAND_TOPIC', label: 'Auto-Expand', icon: BrainCircuit},
   { type: 'DELETE', label: 'Delete', icon: Trash2 },
 ];
+
+const globalActions = [
+    { type: 'SUMMARIZE', label: 'Summarize Canvas', icon: FileText },
+    { type: 'SUGGEST', label: 'Suggest Connections', icon: Lightbulb },
+]
 
 export function Toolbox({
   isNodeSelected,
@@ -58,9 +71,9 @@ export function Toolbox({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleAction = async (action: ActionType, data?: string) => {
-    if ((!isNodeSelected && action !== 'DELETE' && action !== 'YOUTUBE') || (action === 'DELETE' && !isNodeSelected)) {
+    if (['WHAT', 'HOW', 'WHEN', 'EXPLAIN', 'EXPAND', 'CUSTOM', 'YOUTUBE', 'DELETE', 'IMAGE', 'EXPAND_TOPIC'].includes(action) && !isNodeSelected) {
       toast({ 
-        title: action === 'DELETE' ? "Please select a node to delete." : "Please select a node first.", 
+        title: "Please select a node first.",
         variant: "destructive" 
       });
       return;
@@ -73,7 +86,7 @@ export function Toolbox({
       setIsPending(false);
     }
 
-    if (action !== 'YOUTUBE') {
+    if (!['YOUTUBE', 'SUGGEST', 'SUMMARIZE'].includes(action)) {
       if (activeInput) {
         setInputValue('');
         setActiveInput(null);
@@ -89,9 +102,8 @@ export function Toolbox({
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
-    if (activeInput) {
-      const actionType = activeInput === 'custom' ? 'CUSTOM' : 'YOUTUBE';
-      handleAction(actionType, inputValue);
+    if (activeInput === 'custom') {
+      handleAction('CUSTOM', inputValue);
     }
   };
 
@@ -102,13 +114,13 @@ export function Toolbox({
 
   const ToolboxContent = (
     <div className="relative">
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {actionButtons.map(({ type, label, icon: Icon }) => (
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {nodeActions.map(({ type, label, icon: Icon }) => (
           <Button
             key={type}
             variant={type === 'DELETE' ? 'destructive' : 'outline'}
             onClick={() => handleActionClick(type as ActionType)}
-            disabled={isPending || (!isNodeSelected && type !== 'DELETE')}
+            disabled={isPending || !isNodeSelected}
             className="flex flex-col h-20"
           >
             <Icon className="w-6 h-6 mb-1" />
@@ -117,7 +129,7 @@ export function Toolbox({
         ))}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 mb-4">
         <Button 
           variant={activeInput === 'custom' ? 'default' : 'outline'}
           onClick={() => toggleInput('custom')}
@@ -154,6 +166,25 @@ export function Toolbox({
           Search YouTube
         </Button>
       </div>
+
+      <Separator className="my-4"/>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground px-1">Canvas Actions</p>
+        {globalActions.map(({ type, label, icon: Icon }) => (
+            <Button
+                key={type}
+                variant="outline"
+                onClick={() => handleActionClick(type as ActionType)}
+                disabled={isPending}
+                className="w-full justify-start"
+            >
+                <Icon className="mr-2 h-5 w-5" />
+                <span>{label}</span>
+            </Button>
+        ))}
+      </div>
+
       {isPending && <div className="absolute inset-0 bg-background/50 flex items-center justify-center rounded-lg"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>}
     </div>
   );

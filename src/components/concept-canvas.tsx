@@ -4,7 +4,11 @@ import { useState, useRef, useTransition, useCallback, useLayoutEffect } from 'r
 import type { FormEvent, MouseEvent, WheelEvent, TouchEvent } from 'react';
 import { generateNodeContent } from '@/ai/flows/generate-node-content';
 import { findYouTubeVideos } from '@/ai/flows/find-youtube-videos';
-import type { Node, Edge, NodeType, Settings, ActionType, YouTubeVideo } from '@/types';
+import { generateImageForNode } from '@/ai/flows/generate-image';
+import { summarizeCanvas } from '@/ai/flows/summarize-canvas';
+import { suggestConnections } from '@/ai/flows/suggest-connections';
+import { expandTopic } from '@/ai/flows/expand-topic';
+import type { Node, Edge, NodeType, Settings, ActionType, YouTubeVideo, SuggestedConnection } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Toolbox } from '@/components/toolbox';
@@ -12,7 +16,7 @@ import { ConceptItIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -21,7 +25,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const INITIAL_NODE_WIDTH = 288; // w-72
 const INITIAL_NODE_HEIGHT = 128; // h-32
 
-function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessing, onNodeResize, isBeingDragged }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; onNodeTouchStart: (e: TouchEvent, nodeId: string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; isBeingDragged: boolean; }) {
+function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessing, onNodeResize, isBeingDragged }: { node: Node; isSelected: boolean; onNodeDown: (e: MouseEvent, nodeId: string) => void; onNodeTouchStart: (e: TouchEvent, nodeId:string) => void; isProcessing: boolean; onNodeResize: (nodeId: string, size: {width: number, height: number}) => void; isBeingDragged: boolean; }) {
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -45,6 +49,8 @@ function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessi
         allowFullScreen
         className={cn("rounded-md", isBeingDragged && "pointer-events-none")}
       ></iframe>
+    ) : node.type === 'image' ? (
+      <Image src={node.content} alt="AI Generated Node" width={node.width} height={node.height} className="rounded-md object-cover" />
     ) : (
       <div className="text-sm">{node.content}</div>
     )
@@ -58,13 +64,13 @@ function CanvasNode({ node, isSelected, onNodeDown, onNodeTouchStart, isProcessi
       className={cn(
         "absolute bg-card text-card-foreground rounded-lg shadow-lg p-4 cursor-grab transition-colors duration-200 ease-in-out",
         isSelected && "ring-2 ring-ring shadow-2xl",
-        node.type === 'text' ? 'min-w-[18rem] max-w-md' : 'w-72',
+        node.type === 'text' ? 'min-w-[18rem] max-w-md' : `w-72`,
       )}
       style={{
         left: node.position.x,
         top: node.position.y,
-        width: node.type === 'youtube' ? node.width : 'auto',
-        height: node.type === 'youtube' ? node.height : 'auto',
+        width: node.type === 'text' ? 'auto' : node.width,
+        height: node.type === 'text' ? 'auto' : node.height,
       }}
     >
       {content}
@@ -104,6 +110,12 @@ export function ConceptCanvas() {
   const [youtubeResults, setYoutubeResults] = useState<YouTubeVideo[]>([]);
   const [isYoutubeDialogOpen, setIsYoutubeDialogOpen] = useState(false);
   const [isMobileToolboxOpen, setIsMobileToolboxOpen] = useState(false);
+
+  // State for new AI features
+  const [summary, setSummary] = useState('');
+  const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
+  const [suggestedConnections, setSuggestedConnections] = useState<SuggestedConnection[]>([]);
+  const [isConnectionsDialogOpen, setIsConnectionsDialogOpen] = useState(false);
 
 
   const handleSettingsChange = (newSettings: Partial<Settings>) => {
@@ -147,31 +159,41 @@ export function ConceptCanvas() {
     (e.currentTarget.elements.namedItem('topic') as HTMLInputElement).value = '';
   };
 
-  const addNode = (parentNodeId: string, content: string, type: NodeType) => {
-    const parentNode = nodes.find(n => n.id === parentNodeId);
-    if (!parentNode) return;
+  const addNode = (parentNodeId: string | null, content: string, type: NodeType, options?: { xOffset?: number, yOffset?: number }) => {
+    const parentNode = parentNodeId ? nodes.find(n => n.id === parentNodeId) : null;
+    let position: {x: number, y: number};
+    
+    if (parentNode) {
+       position = {
+        x: parentNode.position.x + (options?.xOffset ?? parentNode.width + 80),
+        y: parentNode.position.y + (options?.yOffset ?? 0),
+      };
+    } else {
+      position = getCanvasCenter();
+    }
 
     const newNode: Node = {
       id: crypto.randomUUID(),
       type,
       content,
-      position: {
-        x: parentNode.position.x + parentNode.width + 80,
-        y: parentNode.position.y,
-      },
+      position,
       width: INITIAL_NODE_WIDTH,
-      height: type === 'youtube' ? (INITIAL_NODE_WIDTH * 9) / 16 : INITIAL_NODE_HEIGHT,
-    };
-
-    const newEdge: Edge = {
-      id: `e-${parentNode.id}-${newNode.id}`,
-      source: parentNode.id,
-      target: newNode.id,
+      height: type === 'youtube' ? (INITIAL_NODE_WIDTH * 9) / 16 : type === 'image' ? INITIAL_NODE_WIDTH : INITIAL_NODE_HEIGHT,
     };
 
     setNodes(prev => [...prev, newNode]);
-    setEdges(prev => [...prev, newEdge]);
+    
+    if (parentNodeId) {
+       const newEdge: Edge = {
+        id: `e-${parentNodeId}-${newNode.id}`,
+        source: parentNodeId,
+        target: newNode.id,
+      };
+      setEdges(prev => [...prev, newEdge]);
+    }
+   
     setSelectedNodeId(newNode.id);
+    return newNode;
   };
 
   const deleteNode = (nodeId: string) => {
@@ -181,39 +203,108 @@ export function ConceptCanvas() {
       setSelectedNodeId(null);
     }
   };
+
+  const addEdge = (sourceId: string, targetId: string) => {
+    const edgeExists = edges.some(e => (e.source === sourceId && e.target === targetId) || (e.source === targetId && e.target === sourceId));
+    if (edgeExists) {
+        toast({ title: "Connection already exists.", variant: "destructive"});
+        return;
+    }
+    const newEdge: Edge = {
+        id: `e-${sourceId}-${targetId}`,
+        source: sourceId,
+        target: targetId,
+    };
+    setEdges(prev => [...prev, newEdge]);
+  };
   
   const handleToolboxAction = (actionType: ActionType, data?: string) => {
-    if (actionType === 'DELETE') {
-      if(selectedNodeId) deleteNode(selectedNodeId);
-      return;
+    const parentNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+
+    if (!parentNode && ['WHAT', 'HOW', 'WHEN', 'EXPLAIN', 'EXPAND', 'CUSTOM', 'YOUTUBE', 'DELETE', 'IMAGE', 'EXPAND_TOPIC'].includes(actionType)) {
+        toast({ title: "Please select a node first.", variant: "destructive" });
+        return;
     }
-
-    if (!selectedNodeId) return;
-
-    const parentNode = nodes.find(n => n.id === selectedNodeId);
-    if (!parentNode) return;
     
     startTransition(async () => {
       try {
-        if (actionType === 'YOUTUBE') {
-          const result = await findYouTubeVideos({ topic: parentNode.content });
-          setYoutubeResults(result.videos);
-          setIsYoutubeDialogOpen(true);
-          return;
-        }
+        switch (actionType) {
+            case 'DELETE':
+                if (selectedNodeId) deleteNode(selectedNodeId);
+                break;
+            
+            case 'YOUTUBE':
+                if (parentNode) {
+                    const result = await findYouTubeVideos({ topic: parentNode.content });
+                    setYoutubeResults(result.videos);
+                    setIsYoutubeDialogOpen(true);
+                }
+                break;
 
-        const result = await generateNodeContent({
-          parentNodeContent: parentNode.content,
-          queryType: actionType as any,
-          customQuery: actionType === 'CUSTOM' ? data : undefined,
-          ...settings,
-        });
-        if (result.generatedContent) {
-          addNode(selectedNodeId, result.generatedContent, 'text');
+            case 'IMAGE':
+                if (parentNode) {
+                    const result = await generateImageForNode({ topic: parentNode.content });
+                    if (result.imageUrl) {
+                       setNodes(prev => prev.map(n => n.id === parentNode.id ? { ...n, type: 'image', content: result.imageUrl, height: n.width } : n));
+                    }
+                }
+                break;
+
+            case 'EXPAND_TOPIC':
+                if (parentNode) {
+                    const result = await expandTopic({ topic: parentNode.content });
+                    result.subTopics.forEach((subTopic, index) => {
+                        const angle = (index / result.subTopics.length) * 2 * Math.PI;
+                        const xOffset = Math.cos(angle) * (parentNode.width + 200);
+                        const yOffset = Math.sin(angle) * (parentNode.height + 100);
+                        addNode(parentNode.id, `${subTopic.title}: ${subTopic.content}`, 'text', { xOffset, yOffset });
+                    });
+                }
+                break;
+
+            case 'SUMMARIZE':
+                if (nodes.length > 0) {
+                    const result = await summarizeCanvas({
+                        nodes: nodes.map(n => ({ id: n.id, content: n.content })),
+                        edges: edges.map(e => ({ sourceId: e.source, targetId: e.target })),
+                    });
+                    setSummary(result.summary);
+                    setIsSummaryDialogOpen(true);
+                } else {
+                    toast({ title: "Canvas is empty.", description: "Add some nodes to generate a summary." });
+                }
+                break;
+            
+            case 'SUGGEST':
+                if (nodes.length >= 2) {
+                    const result = await suggestConnections({
+                        nodes: nodes.map(n => ({ id: n.id, content: n.content })),
+                        existingEdgeIds: edges.map(e => e.id),
+                    });
+                    setSuggestedConnections(result.suggestions);
+                    setIsConnectionsDialogOpen(true);
+                } else {
+                     toast({ title: "Not enough nodes.", description: "Add at least two nodes to get suggestions." });
+                }
+                break;
+            
+            default: // WHAT, HOW, WHEN, EXPLAIN, EXPAND, CUSTOM
+                if (parentNode) {
+                    const result = await generateNodeContent({
+                        parentNodeContent: parentNode.content,
+                        queryType: actionType as any,
+                        customQuery: actionType === 'CUSTOM' ? data : undefined,
+                        ...settings,
+                    });
+                    if (result.generatedContent) {
+                        addNode(selectedNodeId, result.generatedContent, 'text');
+                    }
+                }
+                break;
         }
       } catch (error) {
-        console.error("AI generation failed:", error);
-        toast({ title: "AI Generation Failed", description: "Could not generate content. Please try again.", variant: "destructive"});
+        console.error("AI action failed:", error);
+        toast({ title: "AI Action Failed", description: "Could not complete the request. Please try again.", variant: "destructive"});
       }
     });
   };
@@ -470,13 +561,14 @@ export function ConceptCanvas() {
                     isSelected={selectedNodeId === node.id}
                     onNodeDown={onNodeDown}
                     onNodeTouchStart={onNodeTouchStart}
-                    isProcessing={isPending && selectedNodeId === node.id}
+                    isProcessing={isPending && (selectedNodeId === node.id || (actionType === 'SUMMARIZE' || actionType === 'SUGGEST'))}
                     onNodeResize={handleNodeResize}
                     isBeingDragged={draggingNodeId === node.id}
                 />
             ))}
         </div>
       </div>
+
        <Dialog open={isYoutubeDialogOpen} onOpenChange={setIsYoutubeDialogOpen}>
         <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
           <DialogHeader>
@@ -506,6 +598,56 @@ export function ConceptCanvas() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isSummaryDialogOpen} onOpenChange={setIsSummaryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Canvas Summary</DialogTitle>
+            <DialogDescription>
+              Here is a summary of all the concepts on your canvas.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-96">
+            <p className="text-sm">{summary}</p>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isConnectionsDialogOpen} onOpenChange={setIsConnectionsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suggested Connections</DialogTitle>
+            <DialogDescription>
+              The AI has suggested the following connections.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-96">
+             {suggestedConnections.length > 0 ? (
+                <div className="space-y-4">
+                  {suggestedConnections.map((suggestion, index) => {
+                    const sourceNode = nodes.find(n => n.id === suggestion.sourceNodeId);
+                    const targetNode = nodes.find(n => n.id === suggestion.targetNodeId);
+                    return (
+                        <Card key={index}>
+                            <CardContent className="p-4 flex flex-col gap-2">
+                                <p className="text-sm">Connect &quot;{sourceNode?.content.substring(0, 30)}...&quot; to &quot;{targetNode?.content.substring(0, 30)}...&quot;</p>
+                                <p className="text-xs text-muted-foreground">Reason: {suggestion.reason}</p>
+                                <Button size="sm" onClick={() => addEdge(suggestion.sourceNodeId, suggestion.targetNodeId)} className="mt-2 self-end">Create Connection</Button>
+                            </CardContent>
+                        </Card>
+                    );
+                  })}
+                </div>
+            ) : (
+                <p className="text-center text-muted-foreground py-8">No new connections were suggested.</p>
+            )}
+          </ScrollArea>
+           <DialogFooter>
+                <Button variant="outline" onClick={() => setIsConnectionsDialogOpen(false)}>Close</Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
