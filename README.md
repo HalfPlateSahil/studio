@@ -16,8 +16,7 @@ Concept Canvas is a powerful and interactive tool for brainstorming and visualiz
 
 ## Getting Started
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
-
+Tejas is a mad bouy
 ### Prerequisites
 
 *   [Node.js](https://nodejs.org/) (v20 or later)
